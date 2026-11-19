@@ -104,14 +104,19 @@ npm run fn:secrets:dev
 
 ### 5.2 prod
 
-`main` push가 들어오면 `.github/workflows/release.yml`이 `ci.yml`의 검사를 먼저 돌리고, 통과하면 GitHub `Production` Environment 승인을 기다립니다. 승인 후
-GitHub Actions가 migration, 모든 Edge Function, Vercel Production을 순서대로 배포합니다.
-필요한 secret/variable과 reviewer 설정은 [README의 환경 표](../README.md#환경-prod--dev)에 있습니다.
-GitHub `Production` Environment에 required reviewers를 설정해야 승인 대기가 적용됩니다.
-에이전트는 prod 쓰기나 릴리스 승인·실행을 하지 않으며 dev 검증 결과를 사용자에게 전달합니다.
+`main` push가 들어오면 `.github/workflows/release.yml`이 `ci.yml`의 검사를 먼저 돌리고, 통과하면
+곧바로 migration, 모든 Edge Function, Vercel Production을 순서대로 배포합니다. 별도의 승인 단계는
+없습니다. `main`에는 저장소 admin만 merge할 수 있으므로(`Main admins only` ruleset) release PR을
+merge하는 것이 곧 prod 배포 결정입니다. `Production` Environment의 승인 대기는 merge 권한과 같은
+사람에게 같은 결정을 한 번 더 묻는 것이라 없앴습니다. 대신 배포 전에 필요한 일(prod 시크릿 등)은
+merge 전에 끝냅니다. `Production` Environment는 prod 시크릿을 담고 배포 브랜치를 `main`으로
+제한하는 데만 씁니다. 필요한 secret/variable과 ruleset은 [README의 환경 표](../README.md#환경-prod--dev)에
+있습니다.
+에이전트는 `main`에 merge하거나 prod에 쓰지 않으며 dev 검증 결과를 사용자에게 전달합니다.
 일반 배포에서는 수동 prod push로 이 절차를 우회하지 않습니다.
+`dev` → `main` 릴리즈 PR은 [§5.5](#55-릴리즈-대기-목록과-릴리즈-pr)의 `/release`로 만듭니다.
 
-첫 승인 전에는 운영 DB를 백업하고 migration history와 실제 스키마가 저장소와 정렬되었는지
+첫 릴리즈 PR을 merge하기 전에는 운영 DB를 백업하고 migration history와 실제 스키마가 저장소와 정렬되었는지
 확인합니다. 기존 스키마의 버전을 검증 없이 `migration repair`로 일괄 등록하지 않습니다.
 Function/Vault 시크릿과 Auth URL은 릴리스 workflow가 변경하지 않습니다.
 
@@ -120,11 +125,12 @@ Function/Vault 시크릿과 Auth URL은 릴리스 workflow가 변경하지 않�
 
 ### 5.3 원격 프로젝트를 새로 만들었을 때
 
-마이그레이션이 담지 않는 것 세 가지를 따로 채웁니다.
+마이그레이션이 담지 않는 것 네 가지를 따로 채웁니다.
 
 1. Edge Function 시크릿 — [supabase/.env.example](../supabase/.env.example) 참고
 2. Vault 시크릿 — [Remote project secrets](../supabase/README.md#remote-project-secrets)
 3. Auth URL 설정 — Dashboard
+4. OAuth 서버와 Custom Access Token Hook — Dashboard, migration을 push한 뒤에 켭니다([Remote project secrets](../supabase/README.md#remote-project-secrets))
 
 그 다음 [원격 최초 관리자 설정](../supabase/REMOTE_ADMIN_SETUP.md)을 따릅니다.
 
@@ -153,6 +159,98 @@ Function/Vault 시크릿과 Auth URL은 릴리스 workflow가 변경하지 않�
   때문입니다. 대신 저장소 브랜치로 다시 열거나 로컬에서 리뷰하라는 코멘트를 한 번 남깁니다.
   저장소 쓰기 권한이 있으면 fork 대신 이 저장소에 브랜치를 push합니다.
 - `main` 대상 PR(릴리스)에는 Preview가 없습니다. 같은 커밋이 이미 `dev` Preview에 있습니다.
+
+### 5.5 릴리즈 대기 목록과 릴리즈 PR
+
+`.github/workflows/release-dashboard.yml`이 릴리즈 전후의 정리를 맡습니다. 배포와 승인은
+§5.2의 `release.yml`이 그대로 하고, 이 workflow는 목록·PR·태그·이슈만 만듭니다.
+
+근거: [ADR-0002](adr/0002-release-dashboard-and-calver.md), [ADR-0003](adr/0003-generate-release-notices.md)
+
+| 시점                                                         | 하는 일                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dev` 배포나 `release.yml`이 끝날 때, `/release`를 처리한 뒤 | `release-dashboard` 라벨의 고정 이슈 "릴리즈 대기 목록"을 다시 씁니다. 이 workflow가 연 릴리즈 PR이 있으면 그 본문도 갱신합니다. 이 둘을 쓰는 job은 하나이고 모든 실행이 한 concurrency group을 쓰므로, 갱신이 서로 덮어쓰지 않습니다.                                                                                                                                                                                   |
+| 그 이슈에 `/release` 댓글                                    | 저장소 admin인지와 `dev` head 배포 성공을 확인한 뒤 `dev` → `main` PR을 만들고 결과를 댓글로 남깁니다. 확인하는 사이 `dev`가 움직여 다른 커밋이 PR에 들어갔다면 댓글로 알립니다. 이미 열려 있으면 다시 쓰지 않고 그 PR과 `dev` head 배포 상태만 알립니다. 열린 PR은 head가 `dev`를 따라가고 본문은 `dev` 배포마다 갱신되기 때문입니다. 배포 없이 원본 PR 본문만 고쳤다면 Actions 탭에서 workflow를 실행해 다시 그립니다. |
+| `release.yml` 성공 후                                        | 이번 릴리즈의 변경으로 사용자 공지 초안을 생성하고, 배포된 커밋에 CalVer 태그와 GitHub Release를 만든 뒤, 공지 초안이나 할 일이 있으면 `release-follow-up` 라벨의 체크리스트 이슈를 엽니다. 단계마다 이미 있으면 건너뛰므로, 실패한 job을 다시 실행하면 빠진 단계만 채웁니다.                                                                                                                                            |
+
+- 대기 목록은 `main`이 아니라 마지막 릴리즈 태그와 `dev`를 비교합니다. 태그는 prod 배포가 성공한
+  커밋에만 생기므로, 릴리즈 PR을 merge했지만 배포가 아직 끝나지 않았거나 실패한 변경은 목록에서
+  사라지지 않고 "prod 배포 대기"로 따로 보입니다. 이 절은 `main` head의 `release.yml` 실행을 보고
+  배포 중, 실패, 배포 후 태그 생성 중을 구분해 적습니다. 실패한 변경은 `release.yml`을 다시 실행하거나
+  다음 릴리즈 PR과 함께 나갑니다. 릴리즈 노트와 체크리스트도 직전 태그 이후의 변경을 모두 담습니다.
+  첫 태그가 생기기 전에는 `main...dev`를 쓰고, 첫 릴리즈의 노트는 그 merge commit의 첫 parent(merge
+  전 `main`)와 비교해 만듭니다.
+- 변경 목록은 `dev`의 squash 커밋을 PR로 되짚어 만듭니다. PR 없이 `dev`에 들어간 커밋은 따로
+  표시됩니다. 배포 영향(DB, Edge Function, `VITE_*` 변수, Function 시크릿, `config.toml`)은 변경
+  파일로 판단합니다.
+- 할 일은 각 PR 본문의 `## 릴리즈` 절과 변경 파일에서 모읍니다. 릴리즈 workflow가 바꾸지
+  않는 프로젝트별 설정(§5.3)이 여기에 해당합니다. 승인 전에 필요한 일은 릴리즈 PR 본문을 보고 먼저
+  끝냅니다.
+- 사용자 공지는 PR에서 모으지 않고 릴리즈 후 생성합니다. 작성자마다 판단이 달라 버그 수정이나 UI
+  변경이 빠지기 쉬웠기 때문입니다. `notice` job이 직전 태그 이후 PR의 제목과 `## 왜`·`## 바뀌는 동작`
+  절, PR 없이 들어간 커밋의 메시지를 Gemini에 넘기고, 체크리스트 이슈 맨 위에 초안을 마크다운 원문
+  코드 블록으로 넣습니다. 사람이 다듬어 게시합니다.
+  - 프롬프트는 `scripts/release/notice-prompt.md`입니다. 지시는 system instruction으로, 변경 사항은
+    user 메시지로 나눠 PR 본문이 지시로 읽히지 않게 합니다.
+  - 모델이 `없음`을 돌려주면 "공지할 변화가 없습니다"만 적고, 할 일도 없으면 이슈를 열지 않습니다.
+  - 생성이 실패해도(키 누락, 할당량, GitHub·Gemini 오류) 태그와 체크리스트는 만들고, 직접 작성하라는
+    항목과 실행 기록 링크를 남깁니다. 체크리스트가 이미 있으면 모델을 부르지 않습니다.
+  - 초안이 비교한 직전 릴리즈가 `publish`의 것과 다르면 초안을 쓰지 않고 직접 작성 항목을 남깁니다.
+    앞 릴리즈의 태그가 생기기 전에 다음 릴리즈의 초안을 만들면 앞 릴리즈 변경까지 담기기 때문입니다.
+  - 키는 App 키와 분리된 `Release notice` Environment에 있습니다 ([README의 환경 표](../README.md#환경-prod--dev)).
+    모델은 Variable `GEMINI_MODEL`이라 코드 릴리즈 없이 바꿀 수 있습니다. 쉼표로 나눈 목록
+    (`gemini-a,gemini-b`)이면 앞 모델부터 씁니다. 모델 뒤에 `:high`처럼 thinking 수준(`minimal`·
+    `low`·`medium`·`high`·`xhigh`)을 붙이면 고정하고, 없으면 모델 기본값을 씁니다. 모델이 지원하는
+    수준은 모델마다 다르고, 지원하지 않는 수준은 400으로 바로 실패합니다.
+  - Gemini Interactions API를 `store: false`로 불러 입력을 Google 쪽에 보관하지 않습니다.
+  - 503 같은 서버 오류, 408, 네트워크 실패는 같은 모델로 15초, 30초 기다리며 세 번까지 시도합니다.
+    429도 같은 방식으로 다시 시도하되, `error.code`가 `quota_exceeded`(할당량 소진)면 바로 다음
+    모델로 넘어갑니다. 요청 시간 초과(120초), 404(지원이 끝난 모델), 잘렸거나 읽을 수 없는 응답도
+    다음 모델로 넘어가고, 요청·키 오류(400·401·403)와 설정 누락·잘못된 thinking 수준은 바로
+    실패합니다.
+  - 모델 호출 전체는 7분 안에서 끝냅니다. 기다리면 7분을 넘길 때는 기다리지 않고 다음 모델을
+    시도합니다. 시도마다 실패 이유를 실행 기록에 한 줄로 남기고, 경고에는 마지막 이유를 적습니다.
+  - 예전 템플릿의 `- 공지:` 줄은 읽지 않습니다.
+- 본문은 자유 형식이라 관대하게 읽고, 놓친 것은 드러냅니다 (`scripts/release/plan.mjs`).
+
+  | 본문                                           | 처리                                                                                        |
+  | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+  | `## 릴리즈` 또는 `## 릴리스`                   | 다음 `##` 제목까지가 절입니다                                                               |
+  | 목록 줄(`-`, `*`, `+`, `1.`), 들여쓴 하위 목록 | 한 줄이 한 할 일입니다. `할 일:` 접두어는 떼고, `공지:`로 시작하는 줄은 무시합니다          |
+  | `[ ]`·`[x]` 체크박스                           | 떼고 읽습니다                                                                               |
+  | 항목 아래 들여쓴 줄                            | 앞 항목에 이어 붙입니다                                                                     |
+  | HTML 주석, 코드 블록                           | 무시합니다. 코드 블록 안의 `##`도 절을 끝내지 않습니다                                      |
+  | 그 밖의 줄(목록이 아닌 문장, 소제목)           | 대기 목록과 릴리즈 PR에 "읽지 못한 줄"로 표시하고, 체크리스트 이슈에 확인 항목으로 남깁니다 |
+
+  옮겨 적는 제목과 본문의 `@멘션`은 알림이 가지 않게, `Fixes #350` 같은 closing keyword는 릴리즈 PR이
+  `main`에 merge될 때 이슈를 닫지 않게 바꿉니다. 코드 span 안은 그대로 둡니다. 코드 블록은 CommonMark처럼
+  같은 문자로 된, 여는 것 이상 길이의 fence에서 닫힙니다.
+
+- 태그는 한국 날짜의 `vYYYY.M.D`이고, 같은 날 두 번째 릴리즈부터 `.2`, `.3`을 붙입니다. 0을 채우지
+  않아 semver 파서로도 읽힙니다. 실패한 릴리즈에는 태그가 생기지 않으므로 태그는 prod에
+  나간 커밋만 가리킵니다.
+- 릴리즈 PR은 GitHub App 토큰으로 엽니다. `GITHUB_TOKEN`이 연 PR에는 `ci.yml`이 돌지 않기
+  때문입니다. App 키는 `Release automation` Environment에 있고, 권한 확인은 키가 없는 job이
+  먼저 합니다. 필요한 설정은 [README의 환경 표](../README.md#환경-prod--dev)에 있습니다.
+- `issue_comment`·`workflow_run`은 기본 브랜치의 workflow를 실행하므로 이 workflow와
+  `scripts/release/`의 변경은 `main`에 릴리즈된 뒤부터 적용됩니다. 손으로 다시 그리려면 Actions 탭에서
+  workflow를 실행합니다. 로컬에서는 쓰지 않고 본문만 확인할 수 있습니다.
+
+  ```bash
+  DRY_RUN=1 GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=kmlaswtech/kmla-online \
+    node scripts/release/release.mjs dashboard
+  ```
+
+  공지 초안은 배포된 커밋을 `RELEASED_SHA`로 주면 모델 입력을 출력하고, `GEMINI_API_KEY`와
+  `GEMINI_MODEL`도 주면 초안까지 출력합니다.
+
+  ```bash
+  DRY_RUN=1 GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=kmlaswtech/kmla-online \
+    RELEASED_SHA=$(git rev-parse origin/main) node scripts/release/release.mjs notice
+  ```
+
+- 에이전트는 `/release` 댓글로 PR을 열 수는 있어도 릴리즈 PR을 merge하거나 `Production`을 승인하지
+  않습니다.
 
 ---
 

@@ -900,6 +900,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
@@ -920,6 +921,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           expired_at?: string | null
+          gif_path?: string | null
           height?: number | null
           id?: string
           media_kind?: string | null
@@ -939,6 +941,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           expired_at?: string | null
+          gif_path?: string | null
           height?: number | null
           id?: string
           media_kind?: string | null
@@ -2244,6 +2247,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
@@ -2341,6 +2345,12 @@ export type Database = {
         Returns: {
           file_count: number
           media_count: number
+        }[]
+      }
+      get_external_identity: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          profile_id: number
         }[]
       }
       get_group_invite: {
@@ -2631,6 +2641,7 @@ export type Database = {
         }
         Returns: {
           file_name: string
+          gif_path: string
           height: number
           id: string
           kind: string
@@ -2989,6 +3000,7 @@ export type Database = {
           attachment_id: string
           created_at: string
           expired: boolean
+          gif_path: string
           height: number
           media_kind: string
           mime_type: string
@@ -3170,6 +3182,13 @@ export type Database = {
         Args: { p_notification_id: string }
         Returns: boolean
       }
+      mark_post_opened: {
+        Args: { p_post_id: string }
+        Returns: {
+          counted_as_new: boolean
+          notifications_read: number
+        }[]
+      }
       mark_post_read: { Args: { p_post_id: string }; Returns: boolean }
       mark_story_viewed: { Args: { p_story_id: number }; Returns: undefined }
       move_group_category: {
@@ -3193,6 +3212,7 @@ export type Database = {
         Args: { p_within_seconds?: number }
         Returns: string
       }
+      oauth_access_token_hook: { Args: { event: Json }; Returns: Json }
       open_direct_conversation: {
         Args: { p_profile_id: number }
         Returns: string
@@ -3261,6 +3281,7 @@ export type Database = {
         Args: { p_conversation_id: string; p_files: Json; p_message_id: string }
         Returns: {
           attachment_id: string
+          gif_path: string
           object_path: string
           thumbnail_path: string
         }[]
@@ -3272,6 +3293,7 @@ export type Database = {
       prepare_post_attachment: {
         Args: {
           p_height?: number
+          p_keep_gif?: boolean
           p_media_kind?: string
           p_mime_type: string
           p_original_filename: string
@@ -3283,6 +3305,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
