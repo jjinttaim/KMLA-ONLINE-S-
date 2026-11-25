@@ -52,11 +52,11 @@ Dev holds exactly what is merged into `dev`. Every `dev` push runs `.github/work
 
 A PR may only append migrations newer than its base branch's latest, and may not edit, rename, or remove one the base branch has; the `migrations` CI job runs `scripts/check-migration-order.mjs`. When it fails, rebase and regenerate the migration with `npm run db:diff`. The check sees the base branch as of the PR's last push, so a PR merged in between can still make the dev `db push` fail; fix it with a PR that renames the not-yet-deployed migration to a newer version.
 
-`db push` has no `--project-ref`; the link is the target. `db:diff:dev` and `db:push:dev` re-link to dev first; run them, and `fn:deploy:dev`, only from the `dev` head, for drift checks and recovery. Production is deployed by the approved `Production release` job in `.github/workflows/release.yml`, which links to the production project explicitly before it performs a dry run and push.
+`db push` has no `--project-ref`; the link is the target. `db:diff:dev` and `db:push:dev` re-link to dev first; run them, and `fn:deploy:dev`, only from the `dev` head, for drift checks and recovery. Production is deployed by the `Production release` job in `.github/workflows/release.yml`, which links to the production project explicitly before it performs a dry run and push.
 
 Before approving the first production release, back up the database and compare both the remote migration history and the actual schema with this repository. If existing production objects match repository migrations but their history is missing, review and baseline each matching version as a separate manual operation. Do not blindly mark every migration as applied. If the schema differs, reconcile the declarative schema and migration history before enabling automated releases.
 
-Production releases apply database migrations, deploy all repository Edge Functions, and then deploy the same commit to Vercel. They do not synchronize Edge Function secrets, change Vault values, repair migration history, prune remote functions, or roll back an applied migration automatically. After correcting a failure, rerun the failed job only while that SHA is still `main`; otherwise release the corrected latest `main`. Already-applied migrations are skipped. Only one `Production release` job runs at a time, and one waiting for approval holds that slot: when a newer `main` push is pending behind an older release that is waiting for approval, reject the older one.
+Production releases apply database migrations, deploy all repository Edge Functions, and then deploy the same commit to Vercel. They do not synchronize Edge Function secrets, change Vault values, repair migration history, prune remote functions, or roll back an applied migration automatically. After correcting a failure, rerun the failed job only while that SHA is still `main`; otherwise release the corrected latest `main`. Already-applied migrations are skipped. Only one `Production release` job runs at a time; a newer `main` push waits for the running one, and a release that is no longer the head of `main` refuses itself as stale.
 
 Never `--include-seed` a remote push (`seed.sql` inserts into `auth.users`), and never `supabase config push` (`config.toml` holds the local `site_url`).
 
@@ -101,6 +101,8 @@ The school account names are not set by hand: an app admin enters them on `/admi
 
 **Auth URL configuration.** Dashboard, per project.
 
+**OAuth server and access token hook.** Dashboard, per project (accounts §4.8–§4.9). Turn on the OAuth 2.1 server with the authorization path `/oauth/consent`, and enable the Custom Access Token Hook as the Postgres function `public.oauth_access_token_hook`. Enable the hook only after the migration that creates it is deployed to that project: Auth runs it on every token, so a missing function fails every sign-in. Register 연계 서비스 clients (confidential, `client_secret_basic`) in the same place; their secrets stay with the service.
+
 ## Observed declarative-schema gotchas
 
 ### Cross-file dependencies
@@ -137,6 +139,10 @@ If a diff replaces a check constraint with an equivalent expression, restore the
 The `public,private` dump omits policies on `storage.objects`, while a full `storage` dump includes managed internals. Keep only project-owned `storage.objects` policies in `81-storage.sql`.
 
 Schema dumps can also omit extension declarations. Keep project-required extensions explicitly in `01-foundation.sql`.
+
+### Cluster roles
+
+pg-delta does not manage cluster-global roles and refuses `CREATE ROLE` or role membership grants in `schemas/`. `supabase/roles.sql` creates them idempotently for the local and shadow databases before migrations run; the migration that first needs a role creates it the same way for remote projects. Object grants to the role stay in `schemas/`.
 
 ### Windows CLI execution
 

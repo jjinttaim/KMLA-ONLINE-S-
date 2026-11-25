@@ -27,7 +27,9 @@ import {
 import { resetFeed } from "~/features/feed";
 import { groupKeys } from "~/features/groups";
 import { notificationKeys } from "~/features/notifications";
+import { resetPokeSuggestions } from "~/features/pokes";
 import { clearPostEngagement, collapseAllPostBodies } from "~/features/posts";
+import { useAndroidBackWatcher } from "~/shared/hooks/use-android-back-watcher";
 import { useHideOnScroll } from "~/shared/hooks/use-hide-on-scroll";
 import { useServiceWorkerNavigation } from "~/shared/hooks/use-service-worker-navigation";
 import { useDelayedPending } from "~/shared/hooks/use-delayed-pending";
@@ -54,6 +56,8 @@ export default function MainAppLayout() {
   const chrome = resolveAppChrome(matches);
   // 알림을 누르면 떠 있는 창을 다시 불러오지 않고 앱 안에서 옮겨 간다.
   useServiceWorkerNavigation();
+  // 앱이 조작 없이 쌓은 entry를 Android OS 뒤로가기가 건너뛰지 않게 한다.
+  useAndroidBackWatcher();
   const routeOwnsScroll = chrome.scroll === "route";
   const keyboardFrame = useKeyboardShellFrame(routeOwnsScroll);
   const scrollRef = useRef<HTMLElement>(null);
@@ -125,6 +129,10 @@ export default function MainAppLayout() {
           ])
         : stale(groupKeys.all),
       stale(notificationKeys.badge()),
+      // 콕 찌르기 추천도 피드처럼 첫 페이지부터 다시 읽는다. 받은 목록은 아래 재검증이 읽는다.
+      location.pathname === "/pokes"
+        ? resetPokeSuggestions(queryClient).catch(() => undefined)
+        : null,
     ]);
     await revalidator.revalidate();
   };

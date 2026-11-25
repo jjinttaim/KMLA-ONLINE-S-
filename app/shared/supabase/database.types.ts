@@ -717,6 +717,7 @@ export type Database = {
           content_push_enabled: boolean
           group_push_enabled: boolean
           message_preview_hidden: boolean
+          poke_push_enabled: boolean
           profile_id: number
           school_push_enabled: boolean
           timeline_push_enabled: boolean
@@ -728,6 +729,7 @@ export type Database = {
           content_push_enabled?: boolean
           group_push_enabled?: boolean
           message_preview_hidden?: boolean
+          poke_push_enabled?: boolean
           profile_id: number
           school_push_enabled?: boolean
           timeline_push_enabled?: boolean
@@ -738,6 +740,7 @@ export type Database = {
           content_push_enabled?: boolean
           group_push_enabled?: boolean
           message_preview_hidden?: boolean
+          poke_push_enabled?: boolean
           profile_id?: number
           school_push_enabled?: boolean
           timeline_push_enabled?: boolean
@@ -903,6 +906,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
@@ -923,6 +927,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           expired_at?: string | null
+          gif_path?: string | null
           height?: number | null
           id?: string
           media_kind?: string | null
@@ -942,6 +947,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           expired_at?: string | null
+          gif_path?: string | null
           height?: number | null
           id?: string
           media_kind?: string | null
@@ -2247,6 +2253,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
@@ -2344,6 +2351,12 @@ export type Database = {
         Returns: {
           file_count: number
           media_count: number
+        }[]
+      }
+      get_external_identity: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          profile_id: number
         }[]
       }
       get_group_invite: {
@@ -2444,6 +2457,7 @@ export type Database = {
           content_push_enabled: boolean
           group_push_enabled: boolean
           message_preview_hidden: boolean
+          poke_push_enabled: boolean
           school_push_enabled: boolean
           timeline_push_enabled: boolean
         }[]
@@ -2513,6 +2527,13 @@ export type Database = {
         Returns: {
           gone: boolean
           subscribed: boolean
+        }[]
+      }
+      get_poke_state: {
+        Args: { p_profile_id: number }
+        Returns: {
+          poke_count: number
+          waiting: boolean
         }[]
       }
       get_profile_post: {
@@ -2634,6 +2655,7 @@ export type Database = {
         }
         Returns: {
           file_name: string
+          gif_path: string
           height: number
           id: string
           kind: string
@@ -2960,6 +2982,22 @@ export type Database = {
           title: string
         }[]
       }
+      list_my_pokes: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          avatar_path: string
+          cohort: number
+          is_returning_student: boolean
+          last_strong: boolean
+          name: string
+          poke_count: number
+          poked_at: string
+          profile_id: number
+          pub_id: string
+          strong_count: number
+          strong_effect_pending: boolean
+        }[]
+      }
       list_pinned_messages: {
         Args: { p_conversation_id: string }
         Returns: {
@@ -2987,12 +3025,25 @@ export type Database = {
           unread_member_count: number
         }[]
       }
+      list_poke_suggestions: {
+        Args: { p_after_id?: number; p_after_score?: number; p_limit?: number }
+        Returns: {
+          avatar_path: string
+          cohort: number
+          is_returning_student: boolean
+          name: string
+          profile_id: number
+          pub_id: string
+          sort_score: number
+        }[]
+      }
       list_post_attachments: {
         Args: { p_post_id: string }
         Returns: {
           attachment_id: string
           created_at: string
           expired: boolean
+          gif_path: string
           height: number
           media_kind: string
           mime_type: string
@@ -3174,6 +3225,17 @@ export type Database = {
         Args: { p_notification_id: string }
         Returns: boolean
       }
+      mark_my_pokes_seen: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      mark_post_opened: {
+        Args: { p_post_id: string }
+        Returns: {
+          counted_as_new: boolean
+          notifications_read: number
+        }[]
+      }
       mark_post_read: { Args: { p_post_id: string }; Returns: boolean }
       mark_story_viewed: { Args: { p_story_id: number }; Returns: undefined }
       move_group_category: {
@@ -3197,9 +3259,19 @@ export type Database = {
         Args: { p_within_seconds?: number }
         Returns: string
       }
+      oauth_access_token_hook: { Args: { event: Json }; Returns: Json }
       open_direct_conversation: {
         Args: { p_profile_id: number }
         Returns: string
+      }
+      poke_profile: {
+        Args: { p_profile_id: number }
+        Returns: {
+          poke_count: number
+          poked: boolean
+          strong: boolean
+          strong_count: number
+        }[]
       }
       prepare_comment_image: {
         Args: {
@@ -3265,6 +3337,7 @@ export type Database = {
         Args: { p_conversation_id: string; p_files: Json; p_message_id: string }
         Returns: {
           attachment_id: string
+          gif_path: string
           object_path: string
           thumbnail_path: string
         }[]
@@ -3276,6 +3349,7 @@ export type Database = {
       prepare_post_attachment: {
         Args: {
           p_height?: number
+          p_keep_gif?: boolean
           p_media_kind?: string
           p_mime_type: string
           p_original_filename: string
@@ -3287,6 +3361,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           expired_at: string | null
+          gif_path: string | null
           height: number | null
           id: string
           media_kind: string | null
@@ -3721,6 +3796,7 @@ export type Database = {
           p_account_push_enabled: boolean
           p_content_push_enabled: boolean
           p_group_push_enabled: boolean
+          p_poke_push_enabled?: boolean
           p_school_push_enabled: boolean
           p_timeline_push_enabled: boolean
         }
@@ -3844,7 +3920,13 @@ export type Database = {
       notification_actor_identity:
         "identified" | "anonymous" | "staff" | "system"
       notification_category:
-        "content" | "timeline" | "group" | "account" | "school" | "moderation"
+        | "content"
+        | "timeline"
+        | "group"
+        | "account"
+        | "school"
+        | "moderation"
+        | "poke"
       notification_importance: "low" | "normal" | "high"
       notification_kind:
         | "post_commented"
@@ -3877,6 +3959,7 @@ export type Database = {
         | "gongang_preempted"
         | "post_mentioned"
         | "comment_mentioned"
+        | "poked"
       post_attachment_status: "pending" | "ready" | "deleted"
       post_identity: "identified" | "anonymous" | "staff"
       post_kind: "group" | "profile"
@@ -4051,6 +4134,7 @@ export const Constants = {
         "account",
         "school",
         "moderation",
+        "poke",
       ],
       notification_importance: ["low", "normal", "high"],
       notification_kind: [
@@ -4084,6 +4168,7 @@ export const Constants = {
         "gongang_preempted",
         "post_mentioned",
         "comment_mentioned",
+        "poked",
       ],
       post_attachment_status: ["pending", "ready", "deleted"],
       post_identity: ["identified", "anonymous", "staff"],
